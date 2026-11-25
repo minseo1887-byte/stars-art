@@ -1,3 +1,4 @@
+import './modes.js';
 import { Camera } from './camera.js';
 import { connectGestures } from './gestures.js';
 
@@ -9,7 +10,13 @@ const zoom = byId('zoom');
 const minus = byId('minus');
 const plus = byId('plus');
 const info = byId('information');
-const finder = byId('finder');
+const catalog = byId('catalog');
+const details = byId('star-details');
+const compact = matchMedia('(max-width: 680px), (max-height: 530px) and (orientation: landscape)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const buttons = new Map();
+catalog.open = !compact.matches;
+compact.addEventListener('change', () => { catalog.open = !compact.matches; });
 const query = byId('query');
 const results = byId('results');
 const traces = new Map();
@@ -28,30 +35,40 @@ function renderTrace(item) {
     const [x1, y1] = item.stars[from];
     const [x2, y2] = item.stars[to];
     const line = svg('line', { x1, y1, x2, y2, pathLength: 1 }, group);
-    line.style.setProperty('--delay', `${150 + index * 105}ms`);
+    line.style.setProperty('--delay', `${320 + index * 100}ms`);
   });
-  for (const [cx, cy] of item.stars) {
-    svg('circle', { cx, cy, r: 19, class: 'glow' }, group);
-    svg('circle', { cx, cy, r: 7, class: 'core' }, group);
-  }
+  item.stars.forEach(([cx, cy], index) => {
+    const star = svg('g', { class: 'trace-star' }, group);
+    star.style.setProperty('--delay', `${index * 115}ms`);
+    svg('circle', { cx, cy, r: 19, class: 'glow' }, star);
+    svg('circle', { cx, cy, r: 7, class: 'core' }, star);
+  });
   traces.set(item.id, group);
 }
 
 function select(item) {
-  if (selected?.id === item?.id) return;
+  if (selected?.id === item?.id) {
+    if (item) details.open = true;
+    return;
+  }
   traces.get(selected?.id)?.classList.remove('selected');
+  buttons.get(selected?.id)?.setAttribute('aria-pressed', 'false');
   selected = item;
   info.hidden = !item;
   if (!item) return;
+  details.open = true;
   traces.get(item.id).classList.add('selected');
+  buttons.get(item.id).setAttribute('aria-pressed', 'true');
   const hanja = document.createElement('span');
   hanja.lang = 'zh-Hant';
   hanja.textContent = item.hanja;
   byId('star-name').replaceChildren(item.name, hanja);
+  byId('star-shape').textContent = item.shape;
   byId('star-description').textContent = item.description;
+  byId('star-story').textContent = item.story;
 }
 
-function hitAt(x, y, items, camera) {
+function hitAt(x, y, items, camera, activate) {
   let nearest;
   let best = 22;
   for (const item of items) {
@@ -64,40 +81,17 @@ function hitAt(x, y, items, camera) {
       }
     }
   }
-  if (nearest) select(nearest);
-}
-
-function openPanel(id) {
-  if (id === 'finder') {
-    query.value = '';
-    query.dispatchEvent(new Event('input'));
-  }
-  byId(id).showModal();
+  if (nearest) activate(nearest);
 }
 
 for (const button of document.querySelectorAll('[data-dialog]')) {
-  button.addEventListener('click', () => openPanel(button.dataset.dialog));
+  button.addEventListener('click', () => byId(button.dataset.dialog).showModal());
 }
-
-const quiet = byId('quiet');
-const leaveQuiet = byId('leave-quiet');
-function setQuiet(active) {
-  document.body.classList.toggle('quiet', active);
-  quiet.setAttribute('aria-pressed', String(active));
-  leaveQuiet.hidden = !active;
-  if (active) leaveQuiet.focus();
-  else quiet.focus();
-}
-quiet.addEventListener('click', () => setQuiet(true));
-leaveQuiet.addEventListener('click', () => setQuiet(false));
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !leaveQuiet.hidden) setQuiet(false);
-});
 
 async function initialize() {
   const response = await fetch('./data/constellations.json');
   if (!response.ok) throw new Error('Constellation data unavailable');
-  const { chart, constellations, pending } = await response.json();
+  const { chart, constellations } = await response.json();
   map.setAttribute('width', chart.width);
   map.setAttribute('height', chart.height);
   map.setAttribute('href', chart.asset);
@@ -109,36 +103,51 @@ async function initialize() {
     minus.disabled = factor <= 1;
     plus.disabled = factor >= 6;
   });
-  const resize = connectGestures(view, camera, (x, y) => hitAt(x, y, constellations, camera));
+  function activate(item) {
+    select(item);
+    if (compact.matches) catalog.open = false;
+    camera.focus(item.stars, reducedMotion.matches);
+  }
+
+  const resize = connectGestures(view, camera, (x, y) => {
+    if (!document.body.classList.contains('quiet')) hitAt(x, y, constellations, camera, activate);
+  });
   new ResizeObserver(resize).observe(view);
   camera.resize();
   constellations.forEach(renderTrace);
 
-  function updateResults() {
-    const term = query.value.trim().replaceAll(/\s+/g, '');
-    const items = constellations.filter(item =>
-      [item.name, item.hanja, item.chartLabel].some(name => name.includes(term))
-    );
-    results.replaceChildren();
-    if (!items.length) results.textContent = '선택할 수 있는 별자리가 없습니다.';
-    for (const item of items) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = `${item.name}  ·  ${item.hanja}`;
-      button.addEventListener('click', () => {
-        finder.close();
-        const total = item.stars.reduce(([x, y], star) => [x + star[0], y + star[1]], [0, 0]);
-        const center = total.map(value => value / item.stars.length);
-        camera.frame(center, camera.width / 2, camera.height * .43, Math.max(2.15, camera.zoom));
-        select(item);
-      });
-      results.append(button);
-    }
+  for (const item of constellations) {
+    const button = document.createElement('button');
+    const hanja = document.createElement('span');
+    hanja.lang = 'zh-Hant';
+    hanja.textContent = item.hanja;
+    button.type = 'button';
+    button.setAttribute('aria-pressed', 'false');
+    button.append(item.name, hanja);
+    button.addEventListener('click', () => {
+      activate(item);
+      if (compact.matches) catalog.querySelector('summary').focus();
+    });
+    buttons.set(item.id, button);
+    results.append(button);
   }
 
-  byId('pending').textContent = `위치와 연결선 검증 예정 · ${pending.join(', ')}`;
+  function normalize(text) {
+    return text.normalize('NFKC').replaceAll(/\s+/g, '');
+  }
+
+  function updateResults() {
+    const term = normalize(query.value);
+    let count = 0;
+    for (const item of constellations) {
+      const matches = [item.name, item.hanja, item.chartLabel, ...(item.aliases ?? [])]
+        .some(name => normalize(name).includes(term));
+      buttons.get(item.id).hidden = !matches;
+      if (matches) count++;
+    }
+    byId('empty').hidden = count > 0;
+  }
   query.addEventListener('input', updateResults);
-  updateResults();
 
   function reset() {
     camera.reset();
@@ -155,13 +164,17 @@ async function initialize() {
     const offsets = { ArrowLeft: [-40, 0], ArrowRight: [40, 0], ArrowUp: [0, -40], ArrowDown: [0, 40] };
     const offset = offsets[event.key];
     if (offset) {
+      camera.stop();
       camera.x += offset[0] / camera.scale;
       camera.y += offset[1] / camera.scale;
       camera.render();
     } else if (['+', '='].includes(event.key)) camera.zoomAt(1.25);
     else if (event.key === '-') camera.zoomAt(.8);
     else if (event.key === '0') reset();
-    else if (event.key === 'Enter') openPanel('finder');
+    else if (event.key === 'Enter' && !document.body.classList.contains('quiet')) {
+      catalog.open = true;
+      query.focus();
+    }
     else return;
     event.preventDefault();
   });

@@ -40,6 +40,7 @@ export function connectGestures(view, camera, hit) {
 
   view.addEventListener('pointerdown', event => {
     if (event.button !== 0 || pointers.size === 2) return;
+    camera.stop();
     flush();
     const position = point(event);
     tap = pointers.size ? null : position;
