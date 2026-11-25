@@ -53,14 +53,17 @@ export class Camera {
     this.render();
   }
 
-  stop() {
+  stop(reveal = true) {
     if (this.flight === undefined) return;
     cancelAnimationFrame(this.flight);
     this.flight = undefined;
+    const settled = this.onFocusSettled;
+    this.onFocusSettled = undefined;
+    if (reveal) settled?.();
   }
 
-  focus(stars, reducedMotion) {
-    this.stop();
+  focus(stars, { overview, reducedMotion, onSettled }) {
+    this.stop(false);
     const xs = stars.map(([x]) => x);
     const ys = stars.map(([, y]) => y);
     const left = Math.min(...xs);
@@ -78,17 +81,38 @@ export class Camera {
     if (reducedMotion) {
       Object.assign(this, to);
       this.render();
+      onSettled();
       return;
     }
-    const start = performance.now();
+
+    const wide = { x: this.chart.width / 2, y: this.chart.height / 2, zoom: 1 };
+    const distance = Math.hypot(to.x - wide.x, to.y - wide.y) / Math.hypot(wide.x, wide.y);
+    const legs = overview ? [
+      { target: wide, duration: 550 },
+      { target: { ...to, zoom: wide.zoom }, duration: 360 + distance * 460 },
+      { target: to, duration: 680 }
+    ] : [{ target: to, duration: 680 }];
+
+    this.onFocusSettled = onSettled;
+    let origin = from;
+    let index = 0;
+    let start = performance.now();
     const step = time => {
-      const fraction = Math.min(1, (time - start) / 680);
+      // Advance through elapsed legs when the browser skips frames.
+      while (index < legs.length - 1 && time >= start + legs[index].duration) {
+        start += legs[index].duration;
+        origin = legs[index].target;
+        index++;
+      }
+      const { target, duration } = legs[index];
+      const fraction = Math.max(0, Math.min(1, (time - start) / duration));
       const ease = fraction * fraction * (3 - 2 * fraction);
-      this.x = from.x + (to.x - from.x) * ease;
-      this.y = from.y + (to.y - from.y) * ease;
-      this.zoom = from.zoom + (to.zoom - from.zoom) * ease;
+      this.x = origin.x + (target.x - origin.x) * ease;
+      this.y = origin.y + (target.y - origin.y) * ease;
+      this.zoom = origin.zoom + (target.zoom - origin.zoom) * ease;
       this.render();
-      this.flight = fraction < 1 ? requestAnimationFrame(step) : undefined;
+      if (fraction === 1) this.stop();
+      else this.flight = requestAnimationFrame(step);
     };
     this.flight = requestAnimationFrame(step);
   }
@@ -99,7 +123,7 @@ export class Camera {
   }
 
   reset() {
-    this.stop();
+    this.stop(false);
     this.x = this.chart.width / 2;
     this.y = this.chart.height / 2;
     this.zoom = 1;

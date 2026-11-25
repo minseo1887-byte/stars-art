@@ -103,12 +103,18 @@ h1 { font-weight: 350; font-size: clamp(2rem, 4.3vw, 4.15rem); line-height: 1.12
 .information dd { margin: 0; color: var(--muted); word-break: keep-all; }
 .information span { margin-left: .6em; font-size: .82em; font-weight: 400; color: var(--gold); }
 .trace { opacity: 0; pointer-events: none; }
-.trace.selected { opacity: 1; transition: opacity 400ms; }
-.trace line { stroke: #d9ecff; stroke-width: 1.25px; vector-effect: non-scaling-stroke; stroke-dasharray: 1; stroke-dashoffset: 0; }
-.trace.selected line { animation: draw .58s ease-out var(--delay) both; }
-.trace .glow { fill: #add5f8; opacity: .14; }
-.trace .core { fill: #f0f8ff; }
-.trace.selected .trace-star { animation: star-light .65s ease-out var(--delay) both; }
+.trace.selected { opacity: 1; }
+.trace line {
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+}
+.trace .line-halo { stroke: #a9d3f8; stroke-width: 4px; opacity: .17; }
+.trace .line-core { stroke: #d9ecff; stroke-width: 1.7px; opacity: .92; }
+.trace.selected line { animation: draw .95s ease-in-out var(--delay) both; }
+.trace .glow { fill: url(#star-halo); }
+.trace .core { fill: #f2f8ff; }
+.trace.selected .trace-star { animation: star-light 1.15s ease-in-out var(--delay) both; }
 @keyframes star-light { from { opacity: 0; } to { opacity: 1; } }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 dialog {

@@ -31,17 +31,19 @@ function svg(tag, attributes, parent) {
 
 function renderTrace(item) {
   const group = svg('g', { class: 'trace' }, byId('highlights'));
-  item.edges.forEach(([from, to], index) => {
+  for (const [from, to] of item.edges) {
     const [x1, y1] = item.stars[from];
     const [x2, y2] = item.stars[to];
-    const line = svg('line', { x1, y1, x2, y2, pathLength: 1 }, group);
-    line.style.setProperty('--delay', `${320 + index * 100}ms`);
-  });
+    const edge = svg('g', { class: 'trace-edge' }, group);
+    edge.style.setProperty('--delay', `${260 + Math.max(from, to) * 210}ms`);
+    svg('line', { x1, y1, x2, y2, pathLength: 1, class: 'line-halo' }, edge);
+    svg('line', { x1, y1, x2, y2, pathLength: 1, class: 'line-core' }, edge);
+  }
   item.stars.forEach(([cx, cy], index) => {
     const star = svg('g', { class: 'trace-star' }, group);
-    star.style.setProperty('--delay', `${index * 115}ms`);
-    svg('circle', { cx, cy, r: 19, class: 'glow' }, star);
-    svg('circle', { cx, cy, r: 7, class: 'core' }, star);
+    star.style.setProperty('--delay', `${index * 210}ms`);
+    svg('circle', { cx, cy, r: 26, class: 'glow' }, star);
+    svg('circle', { cx, cy, r: 5.5, class: 'core' }, star);
   });
   traces.set(item.id, group);
 }
@@ -57,7 +59,6 @@ function select(item) {
   info.hidden = !item;
   if (!item) return;
   details.open = true;
-  traces.get(item.id).classList.add('selected');
   buttons.get(item.id).setAttribute('aria-pressed', 'true');
   const hanja = document.createElement('span');
   hanja.lang = 'zh-Hant';
@@ -104,9 +105,14 @@ async function initialize() {
     plus.disabled = factor >= 6;
   });
   function activate(item) {
+    const overview = Boolean(selected && selected.id !== item.id);
     select(item);
     if (compact.matches) catalog.open = false;
-    camera.focus(item.stars, reducedMotion.matches);
+    camera.focus(item.stars, {
+      overview,
+      reducedMotion: reducedMotion.matches,
+      onSettled: () => traces.get(item.id).classList.add('selected')
+    });
   }
 
   const resize = connectGestures(view, camera, (x, y) => {
@@ -157,6 +163,7 @@ async function initialize() {
   minus.addEventListener('click', () => camera.zoomAt(.8));
   byId('reset').addEventListener('click', reset);
   byId('close-info').addEventListener('click', () => {
+    camera.stop(false);
     select(undefined);
     view.focus();
   });

@@ -40,6 +40,14 @@
 
   <section class="observatory" aria-label="천문도 감상">
     <svg id="view" aria-label="천상열차분야지도 원형 성도" tabindex="0">
+      <defs>
+        <radialGradient id="star-halo">
+          <stop offset="0%" stop-color="#d9edff" stop-opacity=".56" />
+          <stop offset="36%" stop-color="#b5d9f6" stop-opacity=".24" />
+          <stop offset="72%" stop-color="#a4ccef" stop-opacity=".07" />
+          <stop offset="100%" stop-color="#a4ccef" stop-opacity="0" />
+        </radialGradient>
+      </defs>
       <g id="world">
         <image id="map" />
         <g id="highlights" aria-hidden="true"></g>
